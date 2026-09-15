@@ -73,16 +73,36 @@ evaluations when a fact is restated.
     20% cap                               16,800,000   <- binding: True
     Consolidated EBITDA                  100,800,000
 
+## Data model
+
+Two formalisms, because there are two different kinds of thing here.
+
+`schema/program.schema.json` — JSON Schema for the extraction contract. The
+expression language is a **sum type**, so it is modelled as a recursive
+`oneOf` discriminated on `op`, not as an entity. This is the artifact to
+constrain the extractor against; it rejects invented operators, judgment nodes
+without a prompt, and stray keys.
+
+`schema/model.sql` — the entity model, 19 tables. ASTs live in JSON columns;
+everything with identity and a lifecycle is a table. `covenant_dependency` is a
+derived index rebuilt from the ASTs at ingest, which is what keeps the
+portfolio queryable without normalising every node.
+
+Immutability is the spine: `program_version` is effective-dated and superseded
+rather than edited, `fact_snapshot` records restatements as new rows, and
+`evaluation` is append-only. An evaluation run three years ago must still be
+reproducible against the terms and figures as they then stood.
+
 ## Not built yet
 
 - **Delivery / reporting covenants.** "Audited financials within 120 days of
   FYE" is date arithmetic against a fiscal calendar, not a financial
-  expression. It needs a second evaluator emitting the same `CovenantResult`
-  envelope — not a forced fit into this AST.
+  expression. Modelled in `schema/` (`reporting_obligation`) but no evaluator
+  yet; it needs a second one emitting the same `CovenantResult` envelope,
+  not a forced fit into this AST.
 - **Units, scale and currency.** Statements in thousands vs millions is the
-  classic extraction bug. `metadata.scale` is recorded but not enforced;
-  values should carry scale and the interpreter should refuse to combine
-  mismatched ones.
+  classic extraction bug. `schema/model.sql` carries `scale` and `currency` on
+  every fact value, but the Python interpreter does not yet enforce them.
 - **`pro_forma`.** Acquisition/disposal adjustments. Deliberately deferred
   until the operator algebra has been tested against real agreements.
 - **Cure and waiver mechanics.** `covenant.cure` is captured as data but not

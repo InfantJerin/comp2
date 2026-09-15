@@ -1,0 +1,306 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/covenants/program.schema.json",
+  "title": "Extracted credit agreement program",
+  "description": "The contract between extraction and the calculator. Layers 2 and 3 of the model: the definition DAG and the covenant test specs. Extraction may emit nothing outside this grammar; a payload that fails validation is rejected at ingest.",
+
+  "type": "object",
+  "required": ["agreement_id", "version", "definitions", "covenants"],
+  "additionalProperties": false,
+  "properties": {
+    "agreement_id": { "type": "string", "minLength": 1 },
+    "version": { "type": "integer", "minimum": 1 },
+    "metadata": { "$ref": "#/$defs/metadata" },
+    "definitions": {
+      "description": "Named defined terms. Together with ref nodes these form the definition DAG.",
+      "type": "object",
+      "propertyNames": { "pattern": "^[a-z][a-z0-9_]*$" },
+      "additionalProperties": { "$ref": "#/$defs/expression" }
+    },
+    "covenants": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/covenant" }
+    },
+    "reporting_obligations": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/reporting_obligation" }
+    }
+  },
+
+  "$defs": {
+    "value_type": {
+      "description": "flow: measured over a period. ltm_flow: a flow already aggregated over a trailing window. stock: a balance at a point in time. ratio: dimensionless. bool: the result of a comparator.",
+      "enum": ["flow", "ltm_flow", "stock", "ratio", "bool", "count"]
+    },
+
+    "clause": {
+      "description": "Where in the agreement this node came from. Present on any node worth arguing about.",
+      "type": "object",
+      "properties": {
+        "section": { "type": "string" },
+        "page": { "type": "integer", "minimum": 1 },
+        "quote": { "type": "string" },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+      },
+      "additionalProperties": false
+    },
+
+    "metadata": {
+      "type": "object",
+      "properties": {
+        "borrower": { "type": "string" },
+        "deal_type": { "type": "string" },
+        "fiscal_year_end": { "type": "string", "pattern": "^\\d{2}-\\d{2}$" },
+        "reporting_currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
+        "scale": { "enum": ["units", "thousands", "millions"] },
+        "source_document_id": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+
+    "expression": {
+      "description": "One node of an expression AST. A sum type discriminated on 'op'.",
+      "type": "object",
+      "required": ["op"],
+      "oneOf": [
+        { "$ref": "#/$defs/op_const" },
+        { "$ref": "#/$defs/op_input" },
+        { "$ref": "#/$defs/op_ref" },
+        { "$ref": "#/$defs/op_judgment" },
+        { "$ref": "#/$defs/op_schedule" },
+        { "$ref": "#/$defs/op_nary" },
+        { "$ref": "#/$defs/op_divide" },
+        { "$ref": "#/$defs/op_ltm" },
+        { "$ref": "#/$defs/op_bound" },
+        { "$ref": "#/$defs/op_comparator" },
+        { "$ref": "#/$defs/op_negate" },
+        { "$ref": "#/$defs/op_if" }
+      ]
+    },
+
+    "op_const": {
+      "type": "object",
+      "required": ["op", "value", "type"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "const" },
+        "value": { "type": "number" },
+        "type": { "$ref": "#/$defs/value_type" },
+        "clause": { "$ref": "#/$defs/clause" }
+      }
+    },
+
+    "op_input": {
+      "description": "A reference to the input vocabulary. The symbol must exist there; extraction may not invent identifiers.",
+      "type": "object",
+      "required": ["op", "symbol"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "input" },
+        "symbol": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+        "clause": { "$ref": "#/$defs/clause" }
+      }
+    },
+
+    "op_ref": {
+      "description": "A reference to another defined term. These are the edges that make the definitions a DAG rather than a forest of trees.",
+      "type": "object",
+      "required": ["op", "name"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "ref" },
+        "name": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+        "clause": { "$ref": "#/$defs/clause" }
+      }
+    },
+
+    "op_judgment": {
+      "description": "A clause that bottoms out in human determination ('as determined in good faith'). Extraction must emit one of these rather than guess a value or invent an operator.",
+      "type": "object",
+      "required": ["op", "name", "type", "prompt"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "judgment" },
+        "name": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+        "type": { "$ref": "#/$defs/value_type" },
+        "prompt": {
+          "type": "string",
+          "minLength": 10,
+          "description": "What the human is being asked to determine, in their words, citing the clause."
+        },
+        "clause": { "$ref": "#/$defs/clause" }
+      }
+    },
+
+    "op_schedule": {
+      "description": "A date-indexed table, looked up on the test date. Step-down thresholds are data, not logic.",
+      "type": "object",
+      "required": ["op", "type", "entries"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "schedule" },
+        "name": { "type": "string" },
+        "type": { "$ref": "#/$defs/value_type" },
+        "entries": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["from", "value"],
+            "additionalProperties": false,
+            "properties": {
+              "from": { "type": "string", "format": "date" },
+              "to": { "type": ["string", "null"], "format": "date" },
+              "value": { "type": "number" }
+            }
+          }
+        },
+        "clause": { "$ref": "#/$defs/clause" }
+      }
+    },
+
+    "op_nary": {
+      "type": "object",
+      "required": ["op", "args"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "enum": ["add", "subtract", "multiply", "greater_of", "lesser_of", "all_of", "any_of"] },
+        "args": { "type": "array", "minItems": 2, "items": { "$ref": "#/$defs/expression" } },
+        "clause": { "$ref": "#/$defs/clause" }
+      }
+    },
+
+    "op_divide": {
+      "type": "object",
+      "required": ["op", "numerator", "denominator"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "divide" },
+        "numerator": { "$ref": "#/$defs/expression" },
+        "denominator": { "$ref": "#/$defs/expression" },
+        "clause": { "$ref": "#/$defs/clause" }
+      }
+    },
+
+    "op_ltm": {
+      "description": "Trailing aggregate over the last N fiscal periods, default 4. Takes a flow; a stock is point-in-time and cannot be trailed.",
+      "type": "object",
+      "required": ["op", "of"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "ltm" },
+        "of": { "$ref": "#/$defs/expression" },
+        "periods": { "type": "integer", "minimum": 1, "maximum": 12, "default": 4 },
+        "clause": { "$ref": "#/$defs/clause" }
+      }
+    },
+
+    "op_bound": {
+      "description": "cap = min, floor = max. Both operands must share a type.",
+      "type": "object",
+      "required": ["op", "of", "limit"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "enum": ["cap", "floor"] },
+        "of": { "$ref": "#/$defs/expression" },
+        "limit": { "$ref": "#/$defs/expression" },
+        "clause": { "$ref": "#/$defs/clause" }
+      }
+    },
+
+    "op_comparator": {
+      "type": "object",
+      "required": ["op", "left", "right"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "enum": ["gt", "gte", "lt", "lte", "eq"] },
+        "left": { "$ref": "#/$defs/expression" },
+        "right": { "$ref": "#/$defs/expression" },
+        "clause": { "$ref": "#/$defs/clause" }
+      }
+    },
+
+    "op_negate": {
+      "type": "object",
+      "required": ["op", "of"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "negate" },
+        "of": { "$ref": "#/$defs/expression" },
+        "clause": { "$ref": "#/$defs/clause" }
+      }
+    },
+
+    "op_if": {
+      "type": "object",
+      "required": ["op", "condition", "then", "otherwise"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "if" },
+        "condition": { "$ref": "#/$defs/expression" },
+        "then": { "$ref": "#/$defs/expression" },
+        "otherwise": { "$ref": "#/$defs/expression" },
+        "clause": { "$ref": "#/$defs/clause" }
+      }
+    },
+
+    "covenant": {
+      "type": "object",
+      "required": ["id", "name", "metric", "comparator", "threshold"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+        "name": { "type": "string", "minLength": 1 },
+        "metric": { "$ref": "#/$defs/expression" },
+        "comparator": { "enum": ["gt", "gte", "lt", "lte", "eq"] },
+        "threshold": { "$ref": "#/$defs/expression" },
+        "applicability": {
+          "description": "Springing trigger. Absent means always tested. Must type as bool.",
+          "$ref": "#/$defs/expression"
+        },
+        "frequency": { "enum": ["quarterly", "semi_annual", "annual", "monthly", "continuous"] },
+        "testing_period": { "enum": ["ltm", "ytd", "quarter", "point_in_time"] },
+        "cure": { "$ref": "#/$defs/cure" },
+        "consequence": { "enum": ["event_of_default", "margin_ratchet", "cash_sweep", "reporting_only"] },
+        "clause": { "$ref": "#/$defs/clause" }
+      }
+    },
+
+    "cure": {
+      "description": "Captured at extraction; a breach is not a default. Consumed by the breach state machine, not by the interpreter.",
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "enum": ["equity_cure", "grace_period", "none"] },
+        "max_uses_total": { "type": "integer", "minimum": 0 },
+        "max_uses_per_4_quarters": { "type": "integer", "minimum": 0 },
+        "consecutive_limit": { "type": "integer", "minimum": 0 },
+        "window_days": { "type": "integer", "minimum": 0 },
+        "clause": { "$ref": "#/$defs/clause" }
+      }
+    },
+
+    "reporting_obligation": {
+      "description": "A delivery covenant. Date arithmetic against a fiscal calendar, not a financial expression -- a separate evaluator, same result envelope.",
+      "type": "object",
+      "required": ["id", "name", "deliverable", "trigger", "due_days"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+        "name": { "type": "string" },
+        "deliverable": {
+          "enum": ["audited_financials", "unaudited_financials", "compliance_certificate",
+                   "budget", "projections", "borrowing_base_certificate", "management_accounts",
+                   "auditor_management_letter", "notice_of_default"]
+        },
+        "trigger": { "enum": ["fiscal_year_end", "fiscal_quarter_end", "fiscal_month_end", "on_request", "on_event"] },
+        "due_days": { "type": "integer", "minimum": 0 },
+        "grace_days": { "type": "integer", "minimum": 0, "default": 0 },
+        "applies_from": { "type": "string", "format": "date" },
+        "clause": { "$ref": "#/$defs/clause" }
+      }
+    }
+  }
+}
