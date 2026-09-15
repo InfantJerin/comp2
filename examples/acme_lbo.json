@@ -1,0 +1,205 @@
+{
+  "agreement_id": "ca_acme_2025_tla",
+  "version": 1,
+  "metadata": {
+    "borrower": "Acme Holdings LLC",
+    "deal_type": "sponsor_lbo_unitranche",
+    "fiscal_year_end": "12-31",
+    "reporting_currency": "USD",
+    "scale": "units"
+  },
+
+  "definitions": {
+    "ebitda_pre_addbacks": {
+      "op": "add",
+      "clause": {"section": "1.01 'Consolidated EBITDA'", "page": 24},
+      "args": [
+        {"op": "input", "symbol": "net_income"},
+        {"op": "input", "symbol": "interest_expense"},
+        {"op": "input", "symbol": "tax_expense"},
+        {"op": "input", "symbol": "depreciation_amortization"}
+      ]
+    },
+
+    "ltm_ebitda_pre_addbacks": {
+      "op": "ltm",
+      "of": {"op": "ref", "name": "ebitda_pre_addbacks"}
+    },
+
+    "addbacks_quarterly": {
+      "op": "add",
+      "clause": {"section": "1.01 'Consolidated EBITDA' (b)(iv)-(vii)", "page": 25},
+      "args": [
+        {"op": "input", "symbol": "non_recurring_charges"},
+        {"op": "input", "symbol": "restructuring_charges"},
+        {"op": "input", "symbol": "run_rate_synergies"},
+        {
+          "op": "judgment",
+          "name": "extraordinary_items",
+          "type": "flow",
+          "prompt": "Clause (b)(vii) permits add-back of items the Borrower determines in good faith to be extraordinary. Enter the amount for this quarter, or 0.",
+          "clause": {"section": "1.01 'Consolidated EBITDA' (b)(vii)", "page": 25}
+        }
+      ]
+    },
+
+    "addback_cap": {
+      "op": "multiply",
+      "clause": {"section": "1.01 proviso — add-backs capped at 20% of EBITDA before giving effect thereto", "page": 26},
+      "args": [
+        {"op": "ref", "name": "ltm_ebitda_pre_addbacks"},
+        {"op": "const", "value": 0.20, "type": "ratio"}
+      ]
+    },
+
+    "capped_addbacks": {
+      "op": "cap",
+      "of": {"op": "ltm", "of": {"op": "ref", "name": "addbacks_quarterly"}},
+      "limit": {"op": "ref", "name": "addback_cap"}
+    },
+
+    "consolidated_ebitda": {
+      "op": "add",
+      "args": [
+        {"op": "ref", "name": "ltm_ebitda_pre_addbacks"},
+        {"op": "ref", "name": "capped_addbacks"}
+      ]
+    },
+
+    "netted_cash": {
+      "op": "cap",
+      "clause": {"section": "1.01 'Consolidated Net Debt' — netting capped at $75,000,000", "page": 31},
+      "of": {"op": "input", "symbol": "unrestricted_cash"},
+      "limit": {"op": "const", "value": 75000000, "type": "stock"}
+    },
+
+    "total_net_debt": {
+      "op": "subtract",
+      "clause": {"section": "1.01 'Consolidated Net Debt'", "page": 31},
+      "args": [
+        {
+          "op": "add",
+          "args": [
+            {"op": "input", "symbol": "total_debt"},
+            {"op": "input", "symbol": "capital_lease_obligations"}
+          ]
+        },
+        {"op": "ref", "name": "netted_cash"}
+      ]
+    },
+
+    "senior_secured_net_debt": {
+      "op": "subtract",
+      "args": [
+        {"op": "input", "symbol": "senior_secured_debt"},
+        {"op": "ref", "name": "netted_cash"}
+      ]
+    },
+
+    "total_net_leverage_ratio": {
+      "op": "divide",
+      "numerator": {"op": "ref", "name": "total_net_debt"},
+      "denominator": {"op": "ref", "name": "consolidated_ebitda"}
+    },
+
+    "senior_secured_net_leverage_ratio": {
+      "op": "divide",
+      "numerator": {"op": "ref", "name": "senior_secured_net_debt"},
+      "denominator": {"op": "ref", "name": "consolidated_ebitda"}
+    },
+
+    "fixed_charges": {
+      "op": "ltm",
+      "clause": {"section": "1.01 'Fixed Charges'", "page": 38},
+      "of": {
+        "op": "add",
+        "args": [
+          {"op": "input", "symbol": "cash_interest_expense"},
+          {"op": "input", "symbol": "scheduled_principal_payments"},
+          {"op": "input", "symbol": "dividends_paid"}
+        ]
+      }
+    },
+
+    "fixed_charge_coverage_ratio": {
+      "op": "divide",
+      "clause": {"section": "1.01 'Fixed Charge Coverage Ratio'", "page": 39},
+      "numerator": {
+        "op": "subtract",
+        "args": [
+          {"op": "ref", "name": "consolidated_ebitda"},
+          {"op": "ltm", "of": {"op": "input", "symbol": "maintenance_capex"}}
+        ]
+      },
+      "denominator": {"op": "ref", "name": "fixed_charges"}
+    },
+
+    "revolver_utilisation": {
+      "op": "divide",
+      "numerator": {
+        "op": "add",
+        "args": [
+          {"op": "input", "symbol": "revolver_drawn"},
+          {"op": "input", "symbol": "letters_of_credit_outstanding"}
+        ]
+      },
+      "denominator": {"op": "input", "symbol": "revolver_commitment"}
+    }
+  },
+
+  "covenants": [
+    {
+      "id": "cov_total_net_leverage",
+      "name": "Maximum Total Net Leverage Ratio",
+      "clause": {"section": "7.11(a)", "page": 142},
+      "frequency": "quarterly",
+      "testing_period": "ltm",
+      "metric": {"op": "ref", "name": "total_net_leverage_ratio"},
+      "comparator": "lte",
+      "threshold": {
+        "op": "schedule",
+        "name": "leverage_step_down",
+        "type": "ratio",
+        "clause": {"section": "7.11(a) table", "page": 142},
+        "entries": [
+          {"from": "2025-03-31", "to": "2026-12-31", "value": 4.50},
+          {"from": "2027-01-01", "to": "2027-12-31", "value": 4.00},
+          {"from": "2028-01-01", "to": null, "value": 3.50}
+        ]
+      },
+      "cure": {"type": "equity_cure", "max_uses_total": 4, "consecutive_limit": 2, "window_days": 10},
+      "consequence": "event_of_default"
+    },
+
+    {
+      "id": "cov_fccr",
+      "name": "Minimum Fixed Charge Coverage Ratio",
+      "clause": {"section": "7.11(b)", "page": 143},
+      "frequency": "quarterly",
+      "testing_period": "ltm",
+      "metric": {"op": "ref", "name": "fixed_charge_coverage_ratio"},
+      "comparator": "gte",
+      "threshold": {"op": "const", "value": 1.10, "type": "ratio"},
+      "cure": {"type": "equity_cure", "max_uses_total": 4, "consecutive_limit": 2, "window_days": 10},
+      "consequence": "event_of_default"
+    },
+
+    {
+      "id": "cov_springing_senior_leverage",
+      "name": "Springing Senior Secured Net Leverage Ratio",
+      "clause": {"section": "7.11(c)", "page": 143},
+      "frequency": "quarterly",
+      "testing_period": "ltm",
+      "applicability": {
+        "op": "gt",
+        "clause": {"section": "7.11(c) — tested only if revolver utilisation exceeds 35%", "page": 143},
+        "left": {"op": "ref", "name": "revolver_utilisation"},
+        "right": {"op": "const", "value": 0.35, "type": "ratio"}
+      },
+      "metric": {"op": "ref", "name": "senior_secured_net_leverage_ratio"},
+      "comparator": "lte",
+      "threshold": {"op": "const", "value": 5.00, "type": "ratio"},
+      "consequence": "event_of_default"
+    }
+  ]
+}

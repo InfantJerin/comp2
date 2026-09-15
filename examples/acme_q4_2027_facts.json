@@ -1,0 +1,23 @@
+{
+  "entity": "Acme Holdings LLC",
+  "test_date": "2027-12-31",
+  "source_document_id": "cc_acme_q4_2027",
+  "periods": [
+    {"end": "2027-03-31", "flows": {"net_income": 8000000, "interest_expense": 6000000, "tax_expense": 2000000, "depreciation_amortization": 5000000, "non_recurring_charges": 1000000, "restructuring_charges": 500000, "run_rate_synergies": 4000000, "cash_interest_expense": 5500000, "scheduled_principal_payments": 1000000, "dividends_paid": 0, "maintenance_capex": 3000000}},
+    {"end": "2027-06-30", "flows": {"net_income": 8000000, "interest_expense": 6000000, "tax_expense": 2000000, "depreciation_amortization": 5000000, "non_recurring_charges": 1000000, "restructuring_charges": 500000, "run_rate_synergies": 4000000, "cash_interest_expense": 5500000, "scheduled_principal_payments": 1000000, "dividends_paid": 0, "maintenance_capex": 3000000}},
+    {"end": "2027-09-30", "flows": {"net_income": 8000000, "interest_expense": 6000000, "tax_expense": 2000000, "depreciation_amortization": 5000000, "non_recurring_charges": 1000000, "restructuring_charges": 500000, "run_rate_synergies": 4000000, "cash_interest_expense": 5500000, "scheduled_principal_payments": 1000000, "dividends_paid": 0, "maintenance_capex": 3000000}},
+    {"end": "2027-12-31", "flows": {"net_income": 8000000, "interest_expense": 6000000, "tax_expense": 2000000, "depreciation_amortization": 5000000, "non_recurring_charges": 1000000, "restructuring_charges": 500000, "run_rate_synergies": 4000000, "cash_interest_expense": 5500000, "scheduled_principal_payments": 1000000, "dividends_paid": 0, "maintenance_capex": 3000000}}
+  ],
+  "stocks": {
+    "total_debt": 380000000,
+    "senior_secured_debt": 300000000,
+    "capital_lease_obligations": 20000000,
+    "unrestricted_cash": 90000000,
+    "revolver_commitment": 100000000,
+    "revolver_drawn": 20000000,
+    "letters_of_credit_outstanding": 5000000
+  },
+  "judgments": {
+    "extraordinary_items": 0
+  }
+}
